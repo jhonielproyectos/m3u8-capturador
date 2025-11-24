@@ -11,7 +11,7 @@ app = Flask(__name__)
 URL_A_ANALIZAR = "https://ico3c.com/bkg/1vd4knukxrnu" 
 
 def capturar_m3u8(url_video):
-    """Configura y ejecuta Selenium para capturar el M3U8, buscando la URL con parámetros."""
+    """Configura y ejecuta Selenium para capturar el M3U8, buscando la URL con parámetros específicos."""
     
     # --- Configuración del Headless Chrome para Render ---
     chrome_options = Options()
@@ -31,7 +31,7 @@ def capturar_m3u8(url_video):
     enlace_m3u8_capturado = None
     
     try:
-        # Intento 1: Inicialización estándar (usando el PATH)
+        # Intento 1: Inicialización estándar
         try:
             driver = webdriver.Chrome(options=chrome_options)
         except Exception as e:
@@ -45,7 +45,8 @@ def capturar_m3u8(url_video):
         driver.get(url_video)
         
         print("Esperando 10 segundos para la carga del stream...")
-        time.sleep(10)
+        # Aumentar un poco el tiempo para darle más chance al video de empezar a cargar
+        time.sleep(12) 
         
         logs = driver.get_log('performance')
         
@@ -53,17 +54,15 @@ def capturar_m3u8(url_video):
             if 'message' in log:
                 message = log['message']
                 
-                # Criterio de filtrado MEJORADO: Busca '.m3u8?' para asegurar que capture los parámetros.
-                # También comprueba que la URL NO sea la URL base (ico3c.com) si esa base es simple.
-                if '.m3u8?' in message:
+                # Filtro Amplio: Buscamos master.m3u8 en el mensaje
+                if 'master.m3u8' in message:
                     try:
                         entry = json.loads(message)['message']['params']
-                        # Asegúrate de que es una respuesta de red
                         if entry.get('method') == 'Network.responseReceived':
                             url = entry['response']['url']
                             
-                            # Filtro final: debe contener el patrón de parámetros
-                            if '.m3u8?' in url: 
+                            # Filtro Estricto: La URL debe contener 'master.m3u8' Y el token '?t=' o la firma '&s='
+                            if 'master.m3u8' in url and ('?t=' in url or '&s=' in url): 
                                 enlace_m3u8_capturado = url
                                 print(f"¡M3U8 con parámetros capturado!: {enlace_m3u8_capturado}")
                                 break
@@ -96,9 +95,10 @@ def api_capturar():
         })
     else:
         # Si no se encuentra, devuelve un código 404 personalizado.
+        # Es vital revisar los logs de Render si esto ocurre.
         return jsonify({
             "status": "error",
-            "mensaje": f"No se pudo encontrar un enlace .m3u8 CON PARÁMETROS en el tráfico de red de {URL_A_ANALIZAR}.",
+            "mensaje": f"No se pudo encontrar el enlace 'master.m3u8?t=...' en el tráfico de red de {URL_A_ANALIZAR}. Revisa los logs de Render.",
             "analizada": URL_A_ANALIZAR
         }), 404
 
