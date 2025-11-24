@@ -1,4 +1,4 @@
-python==3.10.13 # O 3.11.x, pero 3.10 es muy estable
+python==3.10.13
 flask
 selenium
 gunicorn
