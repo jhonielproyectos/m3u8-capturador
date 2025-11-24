@@ -1,17 +1,13 @@
-from flask import Flask, jsonify
+# Importaciones necesarias (asegúrate de que estén al inicio de app.py)
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-import json
-import time
-import os
+from selenium.webdriver.chrome.service import Service # ¡NUEVA IMPORTACIÓN!
+# ... (otras importaciones) ...
 
-app = Flask(__name__)
-
-# URL que quieres analizar para capturar el M3U8
-URL_A_ANALIZAR = "https://ico3c.com/bkg/1vd4knukxrnu" 
+# ...
 
 def capturar_m3u8(url_video):
-    """Configura y ejecuta Selenium para capturar el M3U8, buscando la URL con parámetros específicos."""
+    """Configura y ejecuta Selenium, simula el clic en el reproductor y captura el M3U8 con parámetros."""
     
     # --- Configuración del Headless Chrome para Render ---
     chrome_options = Options()
@@ -20,58 +16,91 @@ def capturar_m3u8(url_video):
     chrome_options.add_argument("--disable-dev-shm-usage") 
     chrome_options.add_argument("--disable-gpu")
     
-    # Habilitar logging de rendimiento para capturar peticiones de red (M3U8)
+    # Habilitar logging (igual)
     chrome_options.add_experimental_option('w3c', False)
     chrome_options.add_experimental_option('perfLoggingPrefs', {
         'enableNetwork': True,
         'enablePage': False,
     })
     
+    # -----------------------------------------------------------
+    # *** SOLUCIÓN AL ERROR DE DRIVER_LOCATION ***
+    # -----------------------------------------------------------
+    
+    # 1. Definir la ubicación del ejecutable de Chrome en Render (Ruta común en Linux)
+    CHROME_BIN_PATH = "/usr/bin/google-chrome"
+    
+    # 2. Asignar la ubicación del binario a las opciones
+    chrome_options.binary_location = CHROME_BIN_PATH
+    
+    # 3. Intentar inicializar el Driver usando el Service
     driver = None
-    enlace_m3u8_capturado = None
     
     try:
-        # Intento 1: Inicialización estándar
-        try:
-            driver = webdriver.Chrome(options=chrome_options)
-        except Exception as e:
-            print(f"Error en Intento 1: {e}. Intentando con la ruta binaria común de Render.")
-            
-            # Intento 2: Especificar la ruta binaria de Chrome para entornos Linux/Render
-            chrome_options.binary_location = "/usr/bin/google-chrome"
-            driver = webdriver.Chrome(options=chrome_options)
-
-        # --- Proceso de Captura ---
+        # Nota: En entornos de servidor, a menudo el servicio y el controlador
+        # se encuentran en /usr/bin. No siempre necesitas especificar el ChromeDriver.
+        # Intentaremos usar el driver por defecto que está junto al binario de Chrome.
+        driver = webdriver.Chrome(options=chrome_options)
+        print("✅ WebDriver inicializado correctamente usando la ruta binaria.")
+        
+    except Exception as e:
+        print(f"❌ Error CRÍTICO al inicializar el driver: {e}")
+        return None # Detener la ejecución si el driver no se inicializa
+    
+    enlace_m3u8_capturado = None
+    
+    # --- CONTINUAR CON EL PROCESO DE CARGA Y CLIC (El resto de la función sigue igual) ---
+    
+    try:
+        # ... (Mantener la lógica de driver.get(url_video), simulación de clic, time.sleep(12),
+        # y la captura de logs con el filtro estricto por 'master.m3u8' y parámetros) ...
+        
         driver.get(url_video)
         
-        print("Esperando 10 segundos para la carga del stream...")
-        # Aumentar un poco el tiempo para darle más chance al video de empezar a cargar
+        # Espera inicial para que el HTML se cargue
+        time.sleep(5) 
+        
+        # *** SIMULACIÓN DE CLIC ***
+        try:
+            video_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "video"))
+            )
+            video_element.click()
+            print("Clic simulado en el elemento <video>.")
+            
+        except Exception as e:
+            print(f"No se encontró el elemento <video> o el clic falló: {e}. Intentando clic en <body>.")
+            driver.find_element(By.TAG_NAME, 'body').click()
+            
+        
+        # Espera para que el stream se active después del clic
+        print("Esperando 12 segundos para la activación del stream después del clic...")
         time.sleep(12) 
         
+        # --- Captura de Logs ---
         logs = driver.get_log('performance')
+        # ... (Resto del bucle de logs y filtrado) ...
         
         for log in logs:
             if 'message' in log:
                 message = log['message']
                 
-                # Filtro Amplio: Buscamos master.m3u8 en el mensaje
+                # Filtro Estricto: Buscamos master.m3u8 Y los parámetros de seguridad
                 if 'master.m3u8' in message:
                     try:
                         entry = json.loads(message)['message']['params']
                         if entry.get('method') == 'Network.responseReceived':
                             url = entry['response']['url']
                             
-                            # Filtro Estricto: La URL debe contener 'master.m3u8' Y el token '?t=' o la firma '&s='
                             if 'master.m3u8' in url and ('?t=' in url or '&s=' in url): 
                                 enlace_m3u8_capturado = url
                                 print(f"¡M3U8 con parámetros capturado!: {enlace_m3u8_capturado}")
                                 break
                     except Exception:
-                        # Ignorar logs que no son JSON válidos
                         continue
                             
     except Exception as e:
-        print(f"❌ Error crítico durante la navegación o inicialización del driver: {e}")
+        print(f"❌ Error durante la navegación o procesamiento: {e}") # Error de navegación o procesamiento, no de inicialización
         
     finally:
         if driver:
@@ -79,39 +108,4 @@ def capturar_m3u8(url_video):
         
     return enlace_m3u8_capturado
 
-
-@app.route('/capturar', methods=['GET'])
-def api_capturar():
-    """Endpoint que inicia la función de captura y devuelve el resultado."""
-    
-    m3u8_encontrado = capturar_m3u8(URL_A_ANALIZAR)
-    
-    if m3u8_encontrado:
-        # Devuelve el resultado como JSON con el código 200 (OK)
-        return jsonify({
-            "status": "success",
-            "enlace_m3u8": m3u8_encontrado,
-            "analizada": URL_A_ANALIZAR
-        })
-    else:
-        # Si no se encuentra, devuelve un código 404 personalizado.
-        # Es vital revisar los logs de Render si esto ocurre.
-        return jsonify({
-            "status": "error",
-            "mensaje": f"No se pudo encontrar el enlace 'master.m3u8?t=...' en el tráfico de red de {URL_A_ANALIZAR}. Revisa los logs de Render.",
-            "analizada": URL_A_ANALIZAR
-        }), 404
-
-# Define una ruta raíz simple para evitar el 404 inicial
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({
-        "service": "M3U8 Capturador de Render",
-        "instructions": f"Para iniciar la captura del enlace, visita la ruta /capturar",
-        "target_url": URL_A_ANALIZAR
-    })
-
-# Punto de entrada para Gunicorn/Render
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+# ... (Mantener el resto de la app.py sin cambios: api_capturar, home, __main__) ...
