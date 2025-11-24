@@ -1,0 +1,6 @@
+flask
+selenium
+gunicorn
+# Necesitas una versión de Chrome compatible con Render
+# Puedes probar a no incluir el driver y usar los drivers que Render ya tiene.
+# Si tienes problemas, busca una URL de binario de ChromeDriver compatible.
