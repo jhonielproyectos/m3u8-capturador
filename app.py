@@ -11,7 +11,7 @@ app = Flask(__name__)
 URL_A_ANALIZAR = "https://ico3c.com/bkg/1vd4knukxrnu" 
 
 def capturar_m3u8(url_video):
-    """Configura y ejecuta Selenium para capturar el M3U8."""
+    """Configura y ejecuta Selenium para capturar el M3U8, buscando la URL con parámetros."""
     
     # --- Configuración del Headless Chrome para Render ---
     chrome_options = Options()
@@ -31,10 +31,8 @@ def capturar_m3u8(url_video):
     enlace_m3u8_capturado = None
     
     try:
-        # Intenta inicializar el WebDriver.
-        # En Render, a veces es necesario especificar la ubicación del binario de Chrome.
+        # Intento 1: Inicialización estándar (usando el PATH)
         try:
-            # Intento 1: Inicialización estándar (usando el PATH)
             driver = webdriver.Chrome(options=chrome_options)
         except Exception as e:
             print(f"Error en Intento 1: {e}. Intentando con la ruta binaria común de Render.")
@@ -46,7 +44,6 @@ def capturar_m3u8(url_video):
         # --- Proceso de Captura ---
         driver.get(url_video)
         
-        # Tiempo de espera crucial para que el video inicie la reproducción y el M3U8 aparezca
         print("Esperando 10 segundos para la carga del stream...")
         time.sleep(10)
         
@@ -55,16 +52,20 @@ def capturar_m3u8(url_video):
         for log in logs:
             if 'message' in log:
                 message = log['message']
-                # Filtra logs que contengan la URL y el patrón M3U8
-                if '.m3u8' in message:
+                
+                # Criterio de filtrado MEJORADO: Busca '.m3u8?' para asegurar que capture los parámetros.
+                # También comprueba que la URL NO sea la URL base (ico3c.com) si esa base es simple.
+                if '.m3u8?' in message:
                     try:
                         entry = json.loads(message)['message']['params']
-                        # Asegúrate de que sea una respuesta de red
+                        # Asegúrate de que es una respuesta de red
                         if entry.get('method') == 'Network.responseReceived':
                             url = entry['response']['url']
-                            if '.m3u8' in url:
+                            
+                            # Filtro final: debe contener el patrón de parámetros
+                            if '.m3u8?' in url: 
                                 enlace_m3u8_capturado = url
-                                print(f"¡M3U8 Capturado!: {enlace_m3u8_capturado}")
+                                print(f"¡M3U8 con parámetros capturado!: {enlace_m3u8_capturado}")
                                 break
                     except Exception:
                         # Ignorar logs que no son JSON válidos
@@ -97,7 +98,7 @@ def api_capturar():
         # Si no se encuentra, devuelve un código 404 personalizado.
         return jsonify({
             "status": "error",
-            "mensaje": f"No se pudo encontrar un enlace .m3u8 en el tráfico de red de {URL_A_ANALIZAR}.",
+            "mensaje": f"No se pudo encontrar un enlace .m3u8 CON PARÁMETROS en el tráfico de red de {URL_A_ANALIZAR}.",
             "analizada": URL_A_ANALIZAR
         }), 404
 
