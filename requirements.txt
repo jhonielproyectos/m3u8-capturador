@@ -1,6 +1,4 @@
+python==3.10.13 # O 3.11.x, pero 3.10 es muy estable
 flask
 selenium
 gunicorn
-# Necesitas una versión de Chrome compatible con Render
-# Puedes probar a no incluir el driver y usar los drivers que Render ya tiene.
-# Si tienes problemas, busca una URL de binario de ChromeDriver compatible.
